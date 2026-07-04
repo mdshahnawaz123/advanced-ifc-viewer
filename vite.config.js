@@ -12,5 +12,8 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist'
+  },
+  preview: {
+    allowedHosts: true
   }
 });
