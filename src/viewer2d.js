@@ -20,15 +20,16 @@ export class Viewer2DWrapper {
    */
   async loadModel(file) {
     return new Promise((resolve, reject) => {
-      try {
-        const fileUrl = URL.createObjectURL(file);
+        // Append #filename to the blob URL so x-viewer can infer the file extension
+        const fileUrl = URL.createObjectURL(file) + '#' + file.name;
         const ext = file.name.split('.').pop().toLowerCase();
         
         this.viewer.loadModel({
           modelId: `2d_${Date.now()}`,
           name: file.name,
           src: fileUrl,
-          fileFormat: ext
+          fileFormat: ext,
+          format: ext
         }).then(() => {
           this.viewer.goToHomeView();
           this.isLoaded = true;
@@ -37,10 +38,6 @@ export class Viewer2DWrapper {
           console.error("Failed to load 2D model:", err);
           reject(err);
         });
-      } catch (err) {
-        console.error("Error creating object URL for 2D model:", err);
-        reject(err);
-      }
     });
   }
 
