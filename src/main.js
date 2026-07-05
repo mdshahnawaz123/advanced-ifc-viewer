@@ -12,6 +12,7 @@ import { MeasurementTool } from './tools/measurement.js';
 import { AreaTool } from './tools/area.js';
 import { SectionTool } from './tools/section.js';
 import { CommentTool } from './tools/comments.js';
+import { DrawingTool } from './tools/drawings.js';
 import { animateToView, fitAll, getSceneBounds } from './tools/navigation.js';
 import { Toolbar } from './ui/toolbar.js';
 import { Sidebar } from './ui/sidebar.js';
@@ -23,7 +24,7 @@ import { AIChatEngine } from './utils/ai-chat.js';
    Application State
    ============================================ */
 
-let viewer, modelManager, measureTool, areaTool, sectionTool, commentTool, aiChat;
+let viewer, modelManager, measureTool, areaTool, sectionTool, commentTool, drawingTool, aiChat;
 let toolbar, sidebar, viewCube;
 let activeTool = 'select';
 
@@ -48,6 +49,7 @@ async function init() {
   areaTool = new AreaTool(viewer);
   sectionTool = new SectionTool(viewer);
   commentTool = new CommentTool(viewer);
+  drawingTool = new DrawingTool(viewer);
 
   // --- UI ---
   toolbar = new Toolbar();
@@ -66,6 +68,7 @@ async function init() {
   setupFileInput();
   setupElementSelection();
   setupComments();
+  setupDrawings();
 
   // --- AI Chat ---
   aiChat = new AIChatEngine();
@@ -141,11 +144,16 @@ function setupToolbar() {
         sectionTool.clearAll();
         break;
 
+      case 'clearDrawings':
+        drawingTool.clearAll();
+        break;
+
       case 'clearAll':
         measureTool.clearAll();
         areaTool.clearAll();
         sectionTool.clearAll();
         commentTool.clearAll();
+        drawingTool.clearAll();
         viewer.clearHighlight();
         sidebar.showProperties(null);
         break;
@@ -163,6 +171,7 @@ function switchTool(tool) {
   if (activeTool === 'area') areaTool.disable();
   if (activeTool === 'section') sectionTool.disable();
   if (activeTool === 'comment') commentTool.disable();
+  if (activeTool === 'drawing') drawingTool.disable();
 
   // Activate new tool
   activeTool = tool;
@@ -170,6 +179,7 @@ function switchTool(tool) {
   if (tool === 'area') areaTool.enable();
   if (tool === 'section') sectionTool.enable();
   if (tool === 'comment') commentTool.enable();
+  if (tool === 'drawing') drawingTool.enable();
 
   updateStatusBar();
 }
@@ -383,6 +393,132 @@ function setupComments() {
       e.preventDefault();
       saveBtn.click();
     }
+  });
+}
+
+/* ============================================
+   Drawings Events
+   ============================================ */
+
+function setupDrawings() {
+  const formPane = document.getElementById('drawing-form-pane');
+  const listContainer = document.getElementById('drawings-list-container');
+  const descInput = document.getElementById('drawing-description');
+  const saveBtn = document.getElementById('drawing-save');
+  const cancelBtn = document.getElementById('drawing-cancel');
+  const deleteBtn = document.getElementById('drawing-delete-btn');
+
+  const numberInput = document.getElementById('drawing-number');
+  const sheetInput = document.getElementById('drawing-sheet-name');
+  const revInput = document.getElementById('drawing-revision');
+  const discInput = document.getElementById('drawing-discipline');
+
+  const createBtn = document.getElementById('btn-create-drawing');
+  const togglePins = document.getElementById('toggle-drawing-pins');
+
+  if (togglePins) {
+    togglePins.addEventListener('change', (e) => {
+      drawingTool.toggleVisibility(e.target.checked);
+    });
+  }
+
+  drawingTool.onDrawingsChanged = (drawings) => {
+    sidebar.updateDrawingsList(drawings, drawingTool);
+  };
+
+  let editingDrawingId = null;
+
+  drawingTool.onShowForm = (drawingToEdit = null) => {
+    sidebar.show();
+    sidebar.switchTab('drawings');
+    listContainer.classList.add('hidden');
+    formPane.classList.remove('hidden');
+    
+    if (drawingToEdit && typeof drawingToEdit === 'object' && drawingToEdit.id !== undefined) {
+      editingDrawingId = drawingToEdit.id;
+      numberInput.value = drawingToEdit.number || '';
+      sheetInput.value = drawingToEdit.sheetName || '';
+      revInput.value = drawingToEdit.revision || '';
+      discInput.value = drawingToEdit.discipline || 'arch';
+      descInput.value = drawingToEdit.description || '';
+      document.querySelector('#drawing-form-pane .form-header h3').textContent = 'Edit 2D Drawing';
+      if (deleteBtn) deleteBtn.style.display = 'block';
+    } else {
+      editingDrawingId = null;
+      numberInput.value = '';
+      sheetInput.value = '';
+      revInput.value = '';
+      discInput.value = 'arch';
+      descInput.value = '';
+      document.querySelector('#drawing-form-pane .form-header h3').textContent = 'New 2D Drawing';
+      if (deleteBtn) deleteBtn.style.display = 'none';
+    }
+    
+    numberInput.focus();
+  };
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => {
+      if (editingDrawingId) {
+        drawingTool.removeDrawing(editingDrawingId);
+      }
+      cancelBtn.click();
+    });
+  }
+
+  if (createBtn) {
+    createBtn.addEventListener('click', () => {
+      switchTool('drawing');
+      toolbar.setActiveTool('drawing');
+      const mockIntersect = {
+        point: viewer.controls.target.clone(),
+        face: { normal: new THREE.Vector3(0, 1, 0) }
+      };
+      drawingTool.pendingPoint = mockIntersect.point;
+      drawingTool.pendingNormal = mockIntersect.face.normal;
+      drawingTool.onShowForm();
+    });
+  }
+
+  saveBtn.addEventListener('click', () => {
+    if (editingDrawingId) {
+      drawingTool.updateDrawing(editingDrawingId, {
+        number: numberInput.value,
+        sheetName: sheetInput.value,
+        revision: revInput.value,
+        discipline: discInput.value,
+        description: descInput.value
+      });
+    } else {
+      drawingTool.saveDrawing({
+        number: numberInput.value,
+        sheetName: sheetInput.value,
+        revision: revInput.value,
+        discipline: discInput.value,
+        description: descInput.value
+      });
+    }
+    
+    numberInput.value = '';
+    sheetInput.value = '';
+    revInput.value = '';
+    discInput.value = 'arch';
+    descInput.value = '';
+    editingDrawingId = null;
+
+    formPane.classList.add('hidden');
+    listContainer.classList.remove('hidden');
+    
+    switchTool('select');
+    toolbar.setActiveTool('select');
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    drawingTool.cancelDrawing();
+    formPane.classList.add('hidden');
+    listContainer.classList.remove('hidden');
+    switchTool('select');
+    toolbar.setActiveTool('select');
   });
 }
 
@@ -659,7 +795,7 @@ function updateStatusBar() {
     modelCount.textContent = `${count} model${count !== 1 ? 's' : ''} loaded`;
   }
   if (toolLabel) {
-    const toolNames = { select: 'Select', measure: 'Measure', section: 'Section Cut', comment: 'Add Comment' };
+    const toolNames = { select: 'Select', measure: 'Measure', section: 'Section Cut', comment: 'Add Comment', drawing: '2D Drawing' };
     toolLabel.textContent = `Tool: ${toolNames[activeTool] || activeTool}`;
   }
 }

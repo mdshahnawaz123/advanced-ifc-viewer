@@ -281,6 +281,84 @@ export class Sidebar {
 
   /* ---- Internal ---- */
 
+  updateDrawingsList(drawings, drawingTool) {
+    const list = document.getElementById('drawings-list');
+    if (!list) return;
+
+    if (drawings.length === 0) {
+      list.innerHTML = `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <p>No drawings yet</p>
+          <p style="font-size:11px; color: var(--text-muted)">Select 2D Drawing tool and click to add</p>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = drawings.map(d => {
+      const dateStr = d.timestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const number = d.number || 'Unnamed';
+      const sheet = d.sheetName || 'No Sheet';
+      const rev = d.revision ? `Rev ${d.revision}` : '';
+      const disc = d.discipline ? d.discipline.toUpperCase() : 'ARCH';
+
+      return `
+        <div class="comment-item status-open" data-drawing-id="${d.id}">
+          <div class="comment-item-header" style="margin-bottom: 4px;">
+            <div class="issue-status-pill status-answered" style="background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">${disc}</div>
+            <div class="comment-date" style="font-weight: 500;">${rev}</div>
+          </div>
+          <div class="comment-title" style="margin-bottom: 6px;">${number} - ${sheet}</div>
+          <div class="comment-meta">
+            <span style="color: var(--text-muted);">${dateStr}</span>
+            ${d.description ? `<div style="margin-top: 4px;">Notes: ${d.description}</div>` : ''}
+          </div>
+          <div style="position: absolute; right: 10px; top: 10px; display: flex; gap: 8px;">
+            <button class="drawing-edit" data-drawing-id="${d.id}" title="Edit Drawing" style="position: static !important; background: transparent; border: none; padding: 0; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+            <button class="drawing-delete" data-drawing-id="${d.id}" title="Delete Drawing" style="position: static !important; background: transparent; border: none; padding: 0; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Click to navigate
+    list.querySelectorAll('.comment-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.drawing-delete') || e.target.closest('.drawing-edit')) return;
+        const id = parseInt(item.dataset.drawingId, 10);
+        drawingTool.navigateToDrawing(id);
+      });
+    });
+
+    // Edit button
+    list.querySelectorAll('.drawing-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.drawingId, 10);
+        const drawing = drawings.find(d => d.id === id);
+        if (drawingTool.onShowForm) drawingTool.onShowForm(drawing);
+      });
+    });
+
+    // Delete button
+    list.querySelectorAll('.drawing-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.drawingId, 10);
+        drawingTool.removeDrawing(id);
+      });
+    });
+
+    this.switchTab('drawings');
+  }
+
+  /* ---- Internal ---- */
+
   _initTabs() {
     document.querySelectorAll('.sidebar-tab').forEach(tab => {
       tab.addEventListener('click', () => {
