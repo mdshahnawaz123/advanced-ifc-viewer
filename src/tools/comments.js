@@ -27,6 +27,12 @@ export class CommentTool {
     this.enabled = true;
     this.viewer.renderer.domElement.addEventListener('click', this._handleClick);
     this.viewer.renderer.domElement.style.cursor = 'crosshair';
+    
+    // Support 2D Viewer
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      window.App.viewer2d.viewer.renderer.domElement.addEventListener('click', this._handleClick);
+      window.App.viewer2d.viewer.renderer.domElement.style.cursor = 'crosshair';
+    }
   }
 
   /** Disable comment placement mode */
@@ -34,6 +40,12 @@ export class CommentTool {
     this.enabled = false;
     this.viewer.renderer.domElement.removeEventListener('click', this._handleClick);
     this.viewer.renderer.domElement.style.cursor = '';
+    
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      window.App.viewer2d.viewer.renderer.domElement.removeEventListener('click', this._handleClick);
+      window.App.viewer2d.viewer.renderer.domElement.style.cursor = '';
+    }
+    
     this.pendingPoint = null;
     this.pendingNormal = null;
   }
@@ -41,15 +53,33 @@ export class CommentTool {
   /** Handle click — snap to surface, prompt for text */
   _handleClick(event) {
     if (!this.enabled) return;
-    if (event.target !== this.viewer.renderer.domElement) return;
+    
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    
+    if (!activeViewer || !activeViewer.renderer) return;
+    if (event.target !== activeViewer.renderer.domElement) return;
 
-    const meshes = this.viewer.getModelMeshes();
-    const intersects = this.viewer.raycast(event, meshes);
-    if (intersects.length === 0) return;
+    if (is2D) {
+      // For 2D viewer, we can raycast against an invisible plane or use camera projection
+      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      const pos = new THREE.Vector3(x, y, 0.5);
+      pos.unproject(activeViewer.camera);
+      // In orthographic 2D, unprojecting gives us the exact world coordinate
+      this.pendingPoint = new THREE.Vector3(pos.x, pos.y, 0);
+      this.pendingNormal = new THREE.Vector3(0, 0, 1);
+    } else {
+      const meshes = this.viewer.getModelMeshes();
+      const intersects = this.viewer.raycast(event, meshes);
+      if (intersects.length === 0) return;
 
-    const hit = intersects[0];
-    this.pendingPoint = hit.point.clone();
-    this.pendingNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+      const hit = intersects[0];
+      this.pendingPoint = hit.point.clone();
+      this.pendingNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    }
 
     // Show the comment dialog
     this._showDialog();
@@ -251,9 +281,18 @@ export class CommentTool {
     badge.renderOrder = 1002;
     group.add(badge);
 
+    // Shift sprite up so pin line connects
+    badge.position.y = 0.3;
     group.renderOrder = 1001;
+
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    
+    if (activeViewer && activeViewer.scene) {
+      activeViewer.scene.add(group);
+    }
+    
     comment.pin = group;
-    this.viewer.scene.add(group);
   }
 
   _pulsePin(comment) {

@@ -20,23 +20,26 @@ import { Sidebar } from './ui/sidebar.js';
 import { ViewCube } from './ui/view-cube.js';
 import { exportIssuesToExcel } from './utils/export.js';
 import { AIChatEngine } from './utils/ai-chat.js';
+import { Viewer2DWrapper } from './viewer2d.js';
 
 /* ============================================
    Application State
    ============================================ */
 
-let viewer, modelManager, measureTool, areaTool, sectionTool, commentTool, drawingTool, aiChat;
+let viewer, viewer2d, modelManager, measureTool, areaTool, sectionTool, commentTool, drawingTool, aiChat;
 let toolbar, sidebar, viewCube;
 let activeTool = 'select';
+let currentViewMode = '3d'; // '3d' or '2d'
 
 /* ============================================
    Initialization
    ============================================ */
 
 async function init() {
-  // --- Core Viewer ---
+  // --- Core Viewers ---
   const container = document.getElementById('viewport');
   viewer = new Viewer(container);
+  viewer2d = new Viewer2DWrapper('viewport-2d');
 
   // --- Model Manager ---
   modelManager = new ModelManager(viewer);
@@ -60,6 +63,12 @@ async function init() {
   const cubeContainer = document.getElementById('view-cube');
   viewCube = new ViewCube(cubeContainer, viewer.camera, viewer.controls);
   viewer.onRender(() => viewCube.update());
+
+  // Expose globals for tools
+  window.App = {
+    get currentViewMode() { return currentViewMode; },
+    get viewer2d() { return viewer2d; }
+  };
 
   // --- Wire Up Events ---
   setupToolbar();
@@ -125,6 +134,13 @@ function setupToolbar() {
         if (bounds) animateToView(viewer.camera, viewer.controls, param, bounds);
         break;
 
+      case 'viewMode':
+        const mode = param;
+        if (mode === '3d' || mode === '2d') {
+          switchViewMode(mode);
+        }
+        break;
+
       case 'addModel':
         triggerFileInput();
         break;
@@ -160,6 +176,39 @@ function setupToolbar() {
         break;
     }
   };
+  // View Mode dropdown handling
+  const btnViewMode = document.getElementById('btn-view-mode');
+  const viewModeMenu = document.getElementById('view-mode-menu');
+  if (btnViewMode && viewModeMenu) {
+    btnViewMode.addEventListener('click', () => {
+      viewModeMenu.classList.toggle('open');
+    });
+    viewModeMenu.querySelectorAll('.dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const mode = e.currentTarget.dataset.mode;
+        switchViewMode(mode);
+        viewModeMenu.classList.remove('open');
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (!btnViewMode.contains(e.target) && !viewModeMenu.contains(e.target)) {
+        viewModeMenu.classList.remove('open');
+      }
+    });
+  }
+}
+
+function switchViewMode(mode) {
+  currentViewMode = mode;
+  if (mode === '2d') {
+    document.getElementById('viewport').style.display = 'none';
+    viewer2d.show();
+    document.getElementById('view-cube').style.display = 'none';
+  } else {
+    document.getElementById('viewport').style.display = 'block';
+    viewer2d.hide();
+    document.getElementById('view-cube').style.display = 'block';
+  }
 }
 
 /* ============================================
@@ -696,11 +745,31 @@ function setupFileInput() {
 }
 
 async function loadFile(file) {
-  if (!file.name.toLowerCase().endsWith('.ifc')) {
-    console.warn('Not an IFC file:', file.name);
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  if (ext === 'dwg' || ext === 'dxf' || ext === 'pdf') {
+    switchViewMode('2d');
+    showLoading(file.name);
+    try {
+      await viewer2d.loadModel(file);
+      hideWelcome();
+      toolbar.show();
+      console.log(`✅ Loaded 2D: ${file.name}`);
+    } catch (err) {
+      console.error('Failed to load 2D file:', err);
+      alert(`Failed to load ${file.name}.\n\nError: ${err.message}`);
+    } finally {
+      hideLoading();
+    }
     return;
   }
 
+  if (ext !== 'ifc') {
+    console.warn('Unsupported file format:', file.name);
+    return;
+  }
+
+  switchViewMode('3d');
   showLoading(file.name);
 
   try {

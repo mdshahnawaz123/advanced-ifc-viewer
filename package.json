@@ -9,6 +9,7 @@
     "postinstall": "node copy-wasm.mjs"
   },
   "dependencies": {
+    "@x-viewer/core": "^0.21.24",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "three": "^0.170.0",
