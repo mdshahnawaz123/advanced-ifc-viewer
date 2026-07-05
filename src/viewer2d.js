@@ -22,11 +22,13 @@ export class Viewer2DWrapper {
     return new Promise((resolve, reject) => {
       try {
         const fileUrl = URL.createObjectURL(file);
+        const ext = file.name.split('.').pop().toLowerCase();
         
         this.viewer.loadModel({
           modelId: `2d_${Date.now()}`,
           name: file.name,
           src: fileUrl,
+          fileFormat: ext
         }).then(() => {
           this.viewer.goToHomeView();
           this.isLoaded = true;
