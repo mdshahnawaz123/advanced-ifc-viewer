@@ -119,19 +119,34 @@ export class AreaTool {
     if (!activeViewer || !activeViewer.renderer) return;
     if (event.target !== activeViewer.renderer.domElement) return;
 
-    let point;
+    let point, snapType = 'none';
     if (is2D) {
-      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
-        const wp = activeViewer.getWorldPositionByMousePick(event);
-        if (wp) point = wp;
+      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      const raycaster = new THREE.Raycaster();
+      if (activeViewer.camera.isOrthographicCamera) {
+        const height = activeViewer.camera.top - activeViewer.camera.bottom;
+        raycaster.params.Line.threshold = (height / rect.height) * 8; // 8 pixels threshold
+      } else {
+        raycaster.params.Line.threshold = 0.5;
       }
-      if (!point) {
-        const rect = activeViewer.renderer.domElement.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        const pos = new THREE.Vector3(x, y, 0.5);
-        pos.unproject(activeViewer.camera);
-        point = new THREE.Vector3(pos.x, pos.y, 0);
+      raycaster.setFromCamera(mouse, activeViewer.camera);
+      const meshes = typeof activeViewer.getRaycastableObjects === 'function' ? activeViewer.getRaycastableObjects() : [];
+      const intersects = raycaster.intersectObjects(meshes, true);
+
+      if (intersects.length > 0) {
+        point = this._getSnappedPoint(intersects[0]).point;
+      } else {
+        if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+          point = activeViewer.getWorldPositionByMousePick(event);
+        }
+        if (!point) {
+          const pos = new THREE.Vector3(mouse.x, mouse.y, 0.5).unproject(activeViewer.camera);
+          point = new THREE.Vector3(pos.x, pos.y, 0);
+        }
       }
     } else {
       const meshes = this.viewer.getModelMeshes();
@@ -171,17 +186,34 @@ export class AreaTool {
     let point, snapType = 'none';
 
     if (is2D) {
-      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
-        const wp = activeViewer.getWorldPositionByMousePick(event);
-        if (wp) point = wp;
+      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      const raycaster = new THREE.Raycaster();
+      if (activeViewer.camera.isOrthographicCamera) {
+        const height = activeViewer.camera.top - activeViewer.camera.bottom;
+        raycaster.params.Line.threshold = (height / rect.height) * 8;
+      } else {
+        raycaster.params.Line.threshold = 0.5;
       }
-      if (!point) {
-        const rect = activeViewer.renderer.domElement.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        const pos = new THREE.Vector3(x, y, 0.5);
-        pos.unproject(activeViewer.camera);
-        point = new THREE.Vector3(pos.x, pos.y, 0);
+      raycaster.setFromCamera(mouse, activeViewer.camera);
+      const meshes = typeof activeViewer.getRaycastableObjects === 'function' ? activeViewer.getRaycastableObjects() : [];
+      const intersects = raycaster.intersectObjects(meshes, true);
+
+      if (intersects.length > 0) {
+        const snapInfo = this._getSnappedPoint(intersects[0]);
+        point = snapInfo.point;
+        snapType = snapInfo.type;
+      } else {
+        if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+          point = activeViewer.getWorldPositionByMousePick(event);
+        }
+        if (!point) {
+          const pos = new THREE.Vector3(mouse.x, mouse.y, 0.5).unproject(activeViewer.camera);
+          point = new THREE.Vector3(pos.x, pos.y, 0);
+        }
       }
     } else {
       const meshes = this.viewer.getModelMeshes();
