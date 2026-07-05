@@ -5,6 +5,7 @@
  * Tools (measurement, section, navigation), and UI (toolbar, sidebar, view cube).
  */
 
+import * as THREE from 'three';
 import { Viewer } from './viewer.js';
 import { loadIFCFile, getElementProperties, summarizeModel } from './ifc-loader.js';
 import { ModelManager } from './model-manager.js';
