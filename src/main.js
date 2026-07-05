@@ -722,14 +722,16 @@ function setupElementSelection() {
    File Loading
    ============================================ */
 
-function triggerFileInput() {
+function triggerFileInput(acceptStr = '.ifc,.dwg,.dxf,.pdf') {
   const input = document.getElementById('file-input');
+  input.accept = acceptStr;
   input.click();
 }
 
 function setupFileInput() {
   const input = document.getElementById('file-input');
-  const openBtn = document.getElementById('btn-open-file');
+  const btnOpenIfc = document.getElementById('btn-open-ifc');
+  const btnOpen2d = document.getElementById('btn-open-2d');
 
   input.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
@@ -739,9 +741,17 @@ function setupFileInput() {
     input.value = ''; // reset for re-selection
   });
 
-  openBtn.addEventListener('click', () => {
-    input.click();
-  });
+  if (btnOpenIfc) {
+    btnOpenIfc.addEventListener('click', () => {
+      triggerFileInput('.ifc');
+    });
+  }
+  
+  if (btnOpen2d) {
+    btnOpen2d.addEventListener('click', () => {
+      triggerFileInput('.dwg,.dxf,.pdf');
+    });
+  }
 }
 
 async function loadFile(file) {
