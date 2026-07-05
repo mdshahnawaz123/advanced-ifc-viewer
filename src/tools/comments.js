@@ -63,6 +63,21 @@ export class CommentTool {
     }
   }
 
+  /** Update an existing comment */
+  updateComment(id, { text, title, assignee, status, type }) {
+    const comment = this.comments.find(c => c.id === id);
+    if (!comment) return null;
+
+    comment.text = text ? text.trim() : '';
+    comment.title = title ? title.trim() : '';
+    comment.assignee = assignee ? assignee.trim() : '';
+    comment.status = status || 'open';
+    comment.type = type || 'clash';
+
+    if (this.onCommentsChanged) this.onCommentsChanged(this.comments);
+    return comment;
+  }
+
   /** Called when user confirms comment from dialog */
   saveComment({ text, title, assignee, status, type }) {
     if (!this.pendingPoint) return null;

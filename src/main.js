@@ -133,17 +133,17 @@ function setupToolbar() {
         measureTool.clearAll();
         break;
 
+      case 'clearArea':
+        areaTool.clearAll();
+        break;
+
       case 'clearSections':
         sectionTool.clearAll();
         break;
 
-      case 'clearComments':
-        commentTool.clearAll();
-        break;
-
       case 'clearAll':
         measureTool.clearAll();
-        // areaTool.clearAll(); // TODO: implement clearAll in AreaTool if needed
+        areaTool.clearAll();
         sectionTool.clearAll();
         commentTool.clearAll();
         viewer.clearHighlight();
@@ -220,6 +220,7 @@ function setupComments() {
   const textarea = document.getElementById('comment-text');
   const saveBtn = document.getElementById('comment-save');
   const cancelBtn = document.getElementById('comment-cancel');
+  const deleteBtn = document.getElementById('comment-delete-btn');
 
   const titleInput = document.getElementById('issue-title');
   const assigneeInput = document.getElementById('issue-assignee');
@@ -274,13 +275,45 @@ function setupComments() {
     sidebar.updateCommentsList(comments, commentTool);
   };
 
-  commentTool.onShowForm = () => {
+  let editingCommentId = null;
+
+  commentTool.onShowForm = (commentToEdit = null) => {
     sidebar.show();
     sidebar.switchTab('comments');
     listContainer.classList.add('hidden');
     formPane.classList.remove('hidden');
+    
+    if (commentToEdit && typeof commentToEdit === 'object' && commentToEdit.id !== undefined) {
+      editingCommentId = commentToEdit.id;
+      titleInput.value = commentToEdit.title || '';
+      assigneeInput.value = commentToEdit.assignee || '';
+      statusInput.value = commentToEdit.status || 'open';
+      typeInput.value = commentToEdit.type || 'clash';
+      textarea.value = commentToEdit.text || '';
+      document.querySelector('#issue-form-pane .form-header h3').textContent = 'Edit Issue';
+      if (deleteBtn) deleteBtn.style.display = 'block';
+    } else {
+      editingCommentId = null;
+      titleInput.value = '';
+      assigneeInput.value = '';
+      statusInput.value = 'open';
+      typeInput.value = 'clash';
+      textarea.value = '';
+      document.querySelector('#issue-form-pane .form-header h3').textContent = 'New Issue';
+      if (deleteBtn) deleteBtn.style.display = 'none';
+    }
+    
     titleInput.focus();
   };
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => {
+      if (editingCommentId) {
+        commentTool.removeComment(editingCommentId);
+      }
+      cancelBtn.click(); // close form
+    });
+  }
 
   // Allow clicking "Create Issue" without placing a pin (places at camera target)
   if (createBtn) {
@@ -302,13 +335,23 @@ function setupComments() {
 
   // Dialog actions
   saveBtn.addEventListener('click', () => {
-    commentTool.saveComment({
-      text: textarea.value,
-      title: titleInput.value,
-      assignee: assigneeInput.value,
-      status: statusInput.value,
-      type: typeInput.value
-    });
+    if (editingCommentId) {
+      commentTool.updateComment(editingCommentId, {
+        text: textarea.value,
+        title: titleInput.value,
+        assignee: assigneeInput.value,
+        status: statusInput.value,
+        type: typeInput.value
+      });
+    } else {
+      commentTool.saveComment({
+        text: textarea.value,
+        title: titleInput.value,
+        assignee: assigneeInput.value,
+        status: statusInput.value,
+        type: typeInput.value
+      });
+    }
     
     // Clear form
     textarea.value = '';
@@ -316,6 +359,7 @@ function setupComments() {
     assigneeInput.value = '';
     statusInput.value = 'open';
     typeInput.value = 'clash';
+    editingCommentId = null;
 
     formPane.classList.add('hidden');
     listContainer.classList.remove('hidden');

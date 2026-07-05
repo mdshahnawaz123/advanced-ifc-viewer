@@ -234,9 +234,15 @@ export class Sidebar {
             <span style="color: var(--text-muted);">${dateStr}</span>
             ${c.text ? `<div style="margin-top: 4px;">Desc: ${c.text}</div>` : ''}
           </div>
-          <button class="comment-delete" data-comment-id="${c.id}" title="Delete Issue">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          </div>
+          <div style="position: absolute; right: 10px; top: 10px; display: flex; gap: 8px;">
+            <button class="comment-edit" data-comment-id="${c.id}" title="Edit Issue" style="position: static !important; background: transparent; border: none; padding: 0; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+            <button class="comment-delete" data-comment-id="${c.id}" title="Delete Issue" style="position: static !important; background: transparent; border: none; padding: 0; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
         </div>
       `;
     }).join('');
@@ -244,10 +250,20 @@ export class Sidebar {
     // Click to navigate
     list.querySelectorAll('.comment-item').forEach(item => {
       item.addEventListener('click', (e) => {
-        // Prevent if clicking delete
-        if (e.target.closest('.comment-delete')) return;
+        // Prevent if clicking edit or delete
+        if (e.target.closest('.comment-delete') || e.target.closest('.comment-edit')) return;
         const id = parseInt(item.dataset.commentId, 10);
         commentTool.navigateToComment(id);
+      });
+    });
+
+    // Edit button
+    list.querySelectorAll('.comment-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.commentId, 10);
+        const comment = comments.find(c => c.id === id);
+        if (commentTool.onShowForm) commentTool.onShowForm(comment);
       });
     });
 

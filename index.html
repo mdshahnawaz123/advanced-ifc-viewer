@@ -184,8 +184,8 @@
           </button>
           <div class="dropdown-menu" id="clear-menu">
             <button data-clear="dimensions"><span class="view-icon">📐</span> Clear Dimensions</button>
+            <button data-clear="area"><span class="view-icon">📏</span> Clear Areas</button>
             <button data-clear="sections"><span class="view-icon">✂️</span> Clear Section Cuts</button>
-            <button data-clear="comments"><span class="view-icon">💬</span> Clear Issues</button>
             <div class="dropdown-divider"></div>
             <button data-clear="all" class="clear-all-option"><span class="view-icon">🗑️</span> Clear All</button>
           </div>
@@ -293,8 +293,9 @@
               <label>Description</label>
               <textarea id="comment-text" placeholder="Add description..." rows="3"></textarea>
             </div>
-            <div class="comment-dialog-actions" style="margin-top: 20px;">
+            <div class="comment-dialog-actions" style="margin-top: 20px; display: flex; gap: 8px;">
               <button id="comment-cancel" class="btn-secondary" style="flex: 1;">Cancel</button>
+              <button id="comment-delete-btn" class="btn-secondary" style="flex: 1; color: #DC2626; border-color: #DC2626; display: none;">Delete</button>
               <button id="comment-save" class="btn-primary-sm" style="flex: 1;">Save</button>
             </div>
           </div>
