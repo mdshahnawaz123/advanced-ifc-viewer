@@ -16,12 +16,15 @@ export class Sidebar {
   show() {
     this.visible = true;
     document.getElementById('sidebar').classList.remove('hidden');
+    const floatingBtn = document.getElementById('btn-floating-sidebar-toggle');
+    if (floatingBtn) floatingBtn.style.display = 'none';
   }
 
-  /** Hide the sidebar */
   hide() {
     this.visible = false;
     document.getElementById('sidebar').classList.add('hidden');
+    const floatingBtn = document.getElementById('btn-floating-sidebar-toggle');
+    if (floatingBtn) floatingBtn.style.display = 'flex';
   }
 
   /** Toggle visibility */
@@ -371,6 +374,11 @@ export class Sidebar {
     const closeBtn = document.getElementById('btn-close-sidebar');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => this.hide());
+    }
+    
+    const floatingBtn = document.getElementById('btn-floating-sidebar-toggle');
+    if (floatingBtn) {
+      floatingBtn.addEventListener('click', () => this.show());
     }
   }
 }
