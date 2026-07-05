@@ -336,7 +336,6 @@ function setupComments() {
         point: viewer.controls.target.clone(),
         face: { normal: new THREE.Vector3(0, 1, 0) }
       };
-      commentTool._onPointerDown(new MouseEvent('click')); // will fail gracefully or set focus
       commentTool.pendingPoint = mockIntersect.point;
       commentTool.pendingNormal = mockIntersect.face.normal;
       commentTool.onShowForm();
@@ -404,6 +403,7 @@ function setupDrawings() {
   const formPane = document.getElementById('drawing-form-pane');
   const listContainer = document.getElementById('drawings-list-container');
   const descInput = document.getElementById('drawing-description');
+  const fileInput = document.getElementById('drawing-file');
   const saveBtn = document.getElementById('drawing-save');
   const cancelBtn = document.getElementById('drawing-cancel');
   const deleteBtn = document.getElementById('drawing-delete-btn');
@@ -441,6 +441,7 @@ function setupDrawings() {
       revInput.value = drawingToEdit.revision || '';
       discInput.value = drawingToEdit.discipline || 'arch';
       descInput.value = drawingToEdit.description || '';
+      if (fileInput) fileInput.value = '';
       document.querySelector('#drawing-form-pane .form-header h3').textContent = 'Edit 2D Drawing';
       if (deleteBtn) deleteBtn.style.display = 'block';
     } else {
@@ -450,6 +451,7 @@ function setupDrawings() {
       revInput.value = '';
       discInput.value = 'arch';
       descInput.value = '';
+      if (fileInput) fileInput.value = '';
       document.querySelector('#drawing-form-pane .form-header h3').textContent = 'New 2D Drawing';
       if (deleteBtn) deleteBtn.style.display = 'none';
     }
@@ -468,26 +470,37 @@ function setupDrawings() {
 
   if (createBtn) {
     createBtn.addEventListener('click', () => {
-      switchTool('drawing');
-      toolbar.setActiveTool('drawing');
-      const mockIntersect = {
-        point: viewer.controls.target.clone(),
-        face: { normal: new THREE.Vector3(0, 1, 0) }
-      };
-      drawingTool.pendingPoint = mockIntersect.point;
-      drawingTool.pendingNormal = mockIntersect.face.normal;
-      drawingTool.onShowForm();
+      try {
+        switchTool('drawing');
+        toolbar.setActiveTool('drawing');
+        const mockIntersect = {
+          point: viewer.controls.target.clone(),
+          face: { normal: new THREE.Vector3(0, 1, 0) }
+        };
+        drawingTool.pendingPoint = mockIntersect.point;
+        drawingTool.pendingNormal = mockIntersect.face.normal;
+        // alert('Starting drawing tool and showing form!'); // DEBUG
+        drawingTool.onShowForm();
+      } catch (err) {
+        console.error('Error starting drawing tool:', err);
+        alert('Error starting tool: ' + err.message);
+      }
     });
   }
 
   saveBtn.addEventListener('click', () => {
+    let fileName = '';
+    if (fileInput && fileInput.files.length > 0) {
+      fileName = fileInput.files[0].name;
+    }
+
     if (editingDrawingId) {
       drawingTool.updateDrawing(editingDrawingId, {
         number: numberInput.value,
         sheetName: sheetInput.value,
         revision: revInput.value,
         discipline: discInput.value,
-        description: descInput.value
+        description: descInput.value + (fileName ? '\\nAttached: ' + fileName : '')
       });
     } else {
       drawingTool.saveDrawing({
@@ -495,7 +508,7 @@ function setupDrawings() {
         sheetName: sheetInput.value,
         revision: revInput.value,
         discipline: discInput.value,
-        description: descInput.value
+        description: descInput.value + (fileName ? '\\nAttached: ' + fileName : '')
       });
     }
     
@@ -504,6 +517,7 @@ function setupDrawings() {
     revInput.value = '';
     discInput.value = 'arch';
     descInput.value = '';
+    if (fileInput) fileInput.value = '';
     editingDrawingId = null;
 
     formPane.classList.add('hidden');
