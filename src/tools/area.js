@@ -25,6 +25,13 @@ export class AreaTool {
     el.addEventListener('mousemove', this._handleMouseMove);
     window.addEventListener('keydown', this._handleKeyDown);
     el.style.cursor = 'crosshair';
+
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      const el2d = window.App.viewer2d.viewer.renderer.domElement;
+      el2d.addEventListener('click', this._handleClick);
+      el2d.addEventListener('mousemove', this._handleMouseMove);
+      el2d.style.cursor = 'crosshair';
+    }
   }
 
   disable() {
@@ -34,11 +41,23 @@ export class AreaTool {
     el.removeEventListener('mousemove', this._handleMouseMove);
     window.removeEventListener('keydown', this._handleKeyDown);
     el.style.cursor = '';
+
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      const el2d = window.App.viewer2d.viewer.renderer.domElement;
+      el2d.removeEventListener('click', this._handleClick);
+      el2d.removeEventListener('mousemove', this._handleMouseMove);
+      el2d.style.cursor = '';
+    }
+
     this._clearTemp();
     this.points = [];
     
     if (this.snapMarker) {
-      this.viewer.scene.remove(this.snapMarker);
+      if (this.snapMarker.parent) {
+        this.snapMarker.parent.remove(this.snapMarker);
+      } else {
+        this.viewer.scene.remove(this.snapMarker);
+      }
       this.snapMarker.material.dispose();
       this.snapMarker.geometry.dispose();
       this.snapMarker = null;
@@ -95,18 +114,37 @@ export class AreaTool {
 
   _handleClick(event) {
     if (!this.enabled) return;
-    if (event.target !== this.viewer.renderer.domElement) return;
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    if (!activeViewer || !activeViewer.renderer) return;
+    if (event.target !== activeViewer.renderer.domElement) return;
 
-    const meshes = this.viewer.getModelMeshes();
-    const intersects = this.viewer.raycast(event, meshes);
-    if (intersects.length === 0) return;
+    let point;
+    if (is2D) {
+      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+        const wp = activeViewer.getWorldPositionByMousePick(event);
+        if (wp) point = wp;
+      }
+      if (!point) {
+        const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        const pos = new THREE.Vector3(x, y, 0.5);
+        pos.unproject(activeViewer.camera);
+        point = new THREE.Vector3(pos.x, pos.y, 0);
+      }
+    } else {
+      const meshes = this.viewer.getModelMeshes();
+      const intersects = this.viewer.raycast(event, meshes);
+      if (intersects.length === 0) return;
+      point = this._getSnappedPoint(intersects[0]).point;
+    }
 
-    const snapInfo = this._getSnappedPoint(intersects[0]);
-    const point = snapInfo.point;
+    const scene = is2D ? activeViewer.scene : this.viewer.scene;
 
     // Check if clicked near the start point to close the loop
     if (this.points.length >= 3 && point.distanceTo(this.points[0]) < 0.4) {
-      this._createArea(this.points);
+      this._createArea(this.points, scene);
       this._clearTemp();
       this.points = [];
       if (this.snapMarker) this.snapMarker.visible = false;
@@ -114,60 +152,83 @@ export class AreaTool {
     }
 
     this.points.push(point);
-    this._addTempMarker(point);
+    this._addTempMarker(point, scene);
 
     if (this.points.length > 1) {
       const p1 = this.points[this.points.length - 2];
       const p2 = this.points[this.points.length - 1];
-      this._addTempLine(p1, p2);
+      this._addTempLine(p1, p2, scene);
     }
   }
 
   _handleMouseMove(event) {
     if (!this.enabled) return;
 
-    const meshes = this.viewer.getModelMeshes();
-    const intersects = this.viewer.raycast(event, meshes);
-    
-    if (intersects.length === 0) {
-      if (this.snapMarker) this.snapMarker.visible = false;
-      return;
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    if (!activeViewer || !activeViewer.renderer) return;
+
+    let point, snapType = 'none';
+
+    if (is2D) {
+      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+        const wp = activeViewer.getWorldPositionByMousePick(event);
+        if (wp) point = wp;
+      }
+      if (!point) {
+        const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        const pos = new THREE.Vector3(x, y, 0.5);
+        pos.unproject(activeViewer.camera);
+        point = new THREE.Vector3(pos.x, pos.y, 0);
+      }
+    } else {
+      const meshes = this.viewer.getModelMeshes();
+      const intersects = this.viewer.raycast(event, meshes);
+      if (intersects.length === 0) {
+        if (this.snapMarker) this.snapMarker.visible = false;
+        return;
+      }
+      const snapInfo = this._getSnappedPoint(intersects[0]);
+      point = snapInfo.point;
+      snapType = snapInfo.type;
     }
 
-    const snapInfo = this._getSnappedPoint(intersects[0]);
-    const point = snapInfo.point;
+    const scene = is2D ? activeViewer.scene : this.viewer.scene;
 
     if (!this.snapMarker) {
-      const geom = new THREE.SphereGeometry(0.08, 16, 12);
+      const geom = new THREE.SphereGeometry(is2D ? 2 : 0.08, 16, 12);
       const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, depthTest: false, transparent: true, opacity: 0.8 });
       this.snapMarker = new THREE.Mesh(geom, mat);
       this.snapMarker.renderOrder = 1000;
-      this.viewer.scene.add(this.snapMarker);
+      scene.add(this.snapMarker);
     }
     
-    // Change snap marker color if hovering over start point to close loop
-    if (this.points.length >= 3 && point.distanceTo(this.points[0]) < 0.4) {
+    if (this.points.length >= 3 && point.distanceTo(this.points[0]) < (is2D ? 2.0 : 0.4)) {
       this.snapMarker.position.copy(this.points[0]);
-      this.snapMarker.material.color.setHex(0xff0000); // Red to indicate close
+      this.snapMarker.material.color.setHex(0xff0000);
       this.snapMarker.visible = true;
     } else {
       this.snapMarker.position.copy(point);
-      this.snapMarker.material.color.setHex(snapInfo.type === 'midpoint' ? 0x00ffff : 0xffaa00);
-      this.snapMarker.visible = snapInfo.type !== 'none';
+      this.snapMarker.material.color.setHex(snapType === 'midpoint' ? 0x00ffff : 0xffaa00);
+      this.snapMarker.visible = snapType !== 'none' || is2D;
     }
 
     if (this.points.length > 0) {
       this._removeTempPreviewLine();
       const lastPoint = this.points[this.points.length - 1];
-      const targetPoint = (this.points.length >= 3 && point.distanceTo(this.points[0]) < 0.4) ? this.points[0] : point;
-      
-      const geom = new THREE.BufferGeometry().setFromPoints([lastPoint, targetPoint]);
-      const mat = new THREE.LineDashedMaterial({ color: 0x00ff88, dashSize: 0.15, gapSize: 0.08 });
+      const geom = new THREE.BufferGeometry().setFromPoints([lastPoint, point]);
+      const mat = new THREE.LineDashedMaterial({
+        color: 0x00ffff,
+        dashSize: is2D ? 10 : 0.15,
+        gapSize: is2D ? 5 : 0.08
+      });
       const line = new THREE.Line(geom, mat);
       line.computeLineDistances();
-      line.userData._tempPreview = true;
+      line.userData._temp = 'previewLine';
       line.renderOrder = 999;
-      this.viewer.scene.add(line);
+      scene.add(line);
       this.tempObjects.push(line);
     }
   }
@@ -185,22 +246,139 @@ export class AreaTool {
     }
   }
 
-  _addTempMarker(point) {
-    const geom = new THREE.SphereGeometry(0.04, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, depthTest: false });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.copy(point);
-    mesh.renderOrder = 998;
-    this.viewer.scene.add(mesh);
-    this.tempObjects.push(mesh);
+  _createArea(points, scene = this.viewer.scene) {
+    if (points.length < 3) return;
+
+    const group = new THREE.Group();
+
+    const pointsClosed = [...points, points[0]];
+    const lineGeom = new THREE.BufferGeometry().setFromPoints(pointsClosed);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2, depthTest: false });
+    const outline = new THREE.Line(lineGeom, lineMat);
+    outline.renderOrder = 999;
+    group.add(outline);
+
+    const shape = new THREE.Shape();
+    shape.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      shape.lineTo(points[i].x, points[i].y);
+    }
+    const shapeGeom = new THREE.ShapeGeometry(shape);
+    const fillMat = new THREE.MeshBasicMaterial({ 
+      color: 0x00ffff, 
+      transparent: true, 
+      opacity: 0.2, 
+      side: THREE.DoubleSide,
+      depthTest: false
+    });
+    const fillMesh = new THREE.Mesh(shapeGeom, fillMat);
+    
+    fillMesh.position.z = points[0].z;
+    fillMesh.renderOrder = 998;
+    group.add(fillMesh);
+
+    for (const p of points) {
+      const geom = new THREE.SphereGeometry(0.05, 16, 12);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, depthTest: false });
+      const marker = new THREE.Mesh(geom, mat);
+      marker.position.copy(p);
+      marker.renderOrder = 1000;
+      group.add(marker);
+    }
+
+    const area = this._calculateArea(points);
+    const is2D = window.App && window.App.currentViewMode === '2d';
+
+    const centroid = this._calculateCentroid(points);
+    const label = this._createLabelSprite(area, is2D);
+    label.position.copy(centroid);
+    label.renderOrder = 1001;
+    group.add(label);
+
+    scene.add(group);
+
+    const measurement = { id: Date.now().toString(), points: [...points], area, group };
+    this.measurements.push(measurement);
   }
 
-  _addTempLine(p1, p2) {
+  _calculateArea(points) {
+    let area = 0;
+    for (let i = 0; i < points.length; i++) {
+      const j = (i + 1) % points.length;
+      area += points[i].x * points[j].y;
+      area -= points[j].x * points[i].y;
+    }
+    return Math.abs(area) / 2;
+  }
+
+  _calculateCentroid(points) {
+    let x = 0, y = 0, z = 0;
+    for (const p of points) {
+      x += p.x; y += p.y; z += p.z;
+    }
+    return new THREE.Vector3(x / points.length, y / points.length, z / points.length);
+  }
+
+  _createLabelSprite(area, is2D = false) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 256, 64, 8);
+    ctx.fill();
+
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 256, 64, 8);
+    ctx.stroke();
+
+    ctx.font = 'bold 28px "Segoe UI", Inter, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${area.toFixed(2)} m²`, 128, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const spriteMat = new THREE.SpriteMaterial({
+      map: texture,
+      depthTest: false,
+      sizeAttenuation: !is2D
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    if (is2D) {
+      sprite.scale.set(48, 48, 1);
+    } else {
+      sprite.position.y += 0.25;
+      sprite.scale.set(2.4, 0.54, 1);
+    }
+    sprite.renderOrder = 1001;
+
+    return sprite;
+  }
+
+  _addTempMarker(point, scene = this.viewer.scene) {
+    const geom = new THREE.SphereGeometry(0.06, 16, 12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false });
+    const marker = new THREE.Mesh(geom, mat);
+    marker.position.copy(point);
+    marker.userData._temp = 'marker';
+    marker.renderOrder = 1000;
+    scene.add(marker);
+    this.tempObjects.push(marker);
+  }
+
+  _addTempLine(p1, p2, scene = this.viewer.scene) {
     const geom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-    const mat = new THREE.LineBasicMaterial({ color: 0x00ff88, depthTest: false });
+    const mat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2, depthTest: false });
     const line = new THREE.Line(geom, mat);
-    line.renderOrder = 998;
-    this.viewer.scene.add(line);
+    line.userData._temp = 'line';
+    line.renderOrder = 999;
+    scene.add(line);
     this.tempObjects.push(line);
   }
 

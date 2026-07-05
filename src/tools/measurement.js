@@ -128,12 +128,18 @@ export class MeasurementTool {
 
     let point;
     if (is2D) {
-      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      const pos = new THREE.Vector3(x, y, 0.5);
-      pos.unproject(activeViewer.camera);
-      point = new THREE.Vector3(pos.x, pos.y, 0);
+      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+        const wp = activeViewer.getWorldPositionByMousePick(event);
+        if (wp) point = wp;
+      }
+      if (!point) {
+        const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        const pos = new THREE.Vector3(x, y, 0.5);
+        pos.unproject(activeViewer.camera);
+        point = new THREE.Vector3(pos.x, pos.y, 0);
+      }
     } else {
       const meshes = this.viewer.getModelMeshes();
       const intersects = this.viewer.raycast(event, meshes);

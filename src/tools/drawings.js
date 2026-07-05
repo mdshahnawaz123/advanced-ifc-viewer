@@ -60,14 +60,25 @@ export class DrawingTool {
     if (event.target !== activeViewer.renderer.domElement) return;
 
     if (is2D) {
+      if (typeof activeViewer.getWorldPositionByMousePick === 'function') {
+        const wp = activeViewer.getWorldPositionByMousePick(event);
+        if (wp) {
+          this.pendingPoint = wp;
+          this.pendingNormal = new THREE.Vector3(0, 0, 1);
+          this.onShowForm();
+          return;
+        }
+      }
+      // Fallback
       const rect = activeViewer.renderer.domElement.getBoundingClientRect();
       const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      
       const pos = new THREE.Vector3(x, y, 0.5);
       pos.unproject(activeViewer.camera);
+      
       this.pendingPoint = new THREE.Vector3(pos.x, pos.y, 0);
       this.pendingNormal = new THREE.Vector3(0, 0, 1);
+      this.onShowForm();
     } else {
       const meshes = this.viewer.getModelMeshes();
       const intersects = this.viewer.raycast(event, meshes);
@@ -267,19 +278,27 @@ export class DrawingTool {
     ctx.textBaseline = 'middle';
     ctx.fillText('2D', size / 2, size / 2);
 
+    const is2D = window.App && window.App.currentViewMode === '2d';
+
     const badgeTexture = new THREE.CanvasTexture(badgeCanvas);
     badgeTexture.minFilter = THREE.LinearFilter;
-    const badgeMat = new THREE.SpriteMaterial({ map: badgeTexture, depthTest: false, sizeAttenuation: true });
+    const badgeMat = new THREE.SpriteMaterial({ 
+      map: badgeTexture, 
+      depthTest: false, 
+      sizeAttenuation: !is2D 
+    });
     const badge = new THREE.Sprite(badgeMat);
-    badge.scale.set(0.8, 0.8, 1);
+    if (is2D) {
+      badge.scale.set(48, 48, 1);
+    } else {
+      badge.scale.set(0.8, 0.8, 1);
+    }
     badge.renderOrder = 1002;
     group.add(badge);
 
     // Shift sprite up so pin line connects
-    badge.position.y = 0.3;
+    badge.position.y = is2D ? 0 : 0.3;
     group.renderOrder = 1001;
-
-    const is2D = window.App && window.App.currentViewMode === '2d';
     const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
     
     if (activeViewer && activeViewer.scene) {
