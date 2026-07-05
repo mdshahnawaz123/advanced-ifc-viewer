@@ -764,6 +764,8 @@ async function loadFile(file) {
       await viewer2d.loadModel(file);
       hideWelcome();
       toolbar.show();
+      showStatusBar();
+      sidebar.show();
       console.log(`✅ Loaded 2D: ${file.name}`);
     } catch (err) {
       console.error('Failed to load 2D file:', err);

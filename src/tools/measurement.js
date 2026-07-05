@@ -77,6 +77,13 @@ export class MeasurementTool {
     el.addEventListener('mousemove', this._handleMouseMove);
     window.addEventListener('keydown', this._handleKeyDown);
     el.style.cursor = 'crosshair';
+
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      const el2d = window.App.viewer2d.viewer.renderer.domElement;
+      el2d.addEventListener('click', this._handleClick);
+      el2d.addEventListener('mousemove', this._handleMouseMove);
+      el2d.style.cursor = 'crosshair';
+    }
   }
 
   /** Disable measurement mode */
@@ -87,11 +94,23 @@ export class MeasurementTool {
     el.removeEventListener('mousemove', this._handleMouseMove);
     window.removeEventListener('keydown', this._handleKeyDown);
     el.style.cursor = '';
+
+    if (window.App && window.App.viewer2d && window.App.viewer2d.viewer && window.App.viewer2d.viewer.renderer) {
+      const el2d = window.App.viewer2d.viewer.renderer.domElement;
+      el2d.removeEventListener('click', this._handleClick);
+      el2d.removeEventListener('mousemove', this._handleMouseMove);
+      el2d.style.cursor = '';
+    }
+
     this._clearTemp();
     this.firstPoint = null;
     
     if (this.snapMarker) {
-      this.viewer.scene.remove(this.snapMarker);
+      if (this.snapMarker.parent) {
+        this.snapMarker.parent.remove(this.snapMarker);
+      } else {
+        this.viewer.scene.remove(this.snapMarker);
+      }
       this.snapMarker.material.dispose();
       this.snapMarker.geometry.dispose();
       this.snapMarker = null;
@@ -102,23 +121,33 @@ export class MeasurementTool {
   _handleClick(event) {
     if (!this.enabled) return;
 
-    // Prevent toolbar clicks from triggering
-    if (event.target !== this.viewer.renderer.domElement) return;
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    if (!activeViewer || !activeViewer.renderer) return;
+    if (event.target !== activeViewer.renderer.domElement) return;
 
-    const meshes = this.viewer.getModelMeshes();
-    const intersects = this.viewer.raycast(event, meshes);
-    if (intersects.length === 0) return;
-
-    const snapInfo = this._getSnappedPoint(intersects[0]);
-    const point = snapInfo.point;
+    let point;
+    if (is2D) {
+      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const pos = new THREE.Vector3(x, y, 0.5);
+      pos.unproject(activeViewer.camera);
+      point = new THREE.Vector3(pos.x, pos.y, 0);
+    } else {
+      const meshes = this.viewer.getModelMeshes();
+      const intersects = this.viewer.raycast(event, meshes);
+      if (intersects.length === 0) return;
+      point = this._getSnappedPoint(intersects[0]).point;
+    }
 
     if (!this.firstPoint) {
       // First point
       this.firstPoint = point;
-      this._addTempMarker(point);
+      this._addTempMarker(point, is2D ? activeViewer.scene : this.viewer.scene);
     } else {
       // Second point — create measurement
-      this._createMeasurement(this.firstPoint, point);
+      this._createMeasurement(this.firstPoint, point, is2D ? activeViewer.scene : this.viewer.scene);
       this._clearTemp();
       this.firstPoint = null;
       if (this.snapMarker) this.snapMarker.visible = false;
@@ -129,28 +158,44 @@ export class MeasurementTool {
   _handleMouseMove(event) {
     if (!this.enabled) return;
 
-    const meshes = this.viewer.getModelMeshes();
-    const intersects = this.viewer.raycast(event, meshes);
-    
-    if (intersects.length === 0) {
-      if (this.snapMarker) this.snapMarker.visible = false;
-      return;
+    const is2D = window.App && window.App.currentViewMode === '2d';
+    const activeViewer = is2D ? window.App.viewer2d.viewer : this.viewer;
+    if (!activeViewer || !activeViewer.renderer) return;
+
+    let point, snapType = 'none';
+
+    if (is2D) {
+      const rect = activeViewer.renderer.domElement.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      const pos = new THREE.Vector3(x, y, 0.5);
+      pos.unproject(activeViewer.camera);
+      point = new THREE.Vector3(pos.x, pos.y, 0);
+    } else {
+      const meshes = this.viewer.getModelMeshes();
+      const intersects = this.viewer.raycast(event, meshes);
+      if (intersects.length === 0) {
+        if (this.snapMarker) this.snapMarker.visible = false;
+        return;
+      }
+      const snapInfo = this._getSnappedPoint(intersects[0]);
+      point = snapInfo.point;
+      snapType = snapInfo.type;
     }
 
-    const snapInfo = this._getSnappedPoint(intersects[0]);
-    const point = snapInfo.point;
+    const scene = is2D ? activeViewer.scene : this.viewer.scene;
 
     // Manage snap marker
     if (!this.snapMarker) {
-      const geom = new THREE.SphereGeometry(0.08, 16, 12);
+      const geom = new THREE.SphereGeometry(is2D ? 2 : 0.08, 16, 12);
       const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, depthTest: false, transparent: true, opacity: 0.8 });
       this.snapMarker = new THREE.Mesh(geom, mat);
       this.snapMarker.renderOrder = 1000;
-      this.viewer.scene.add(this.snapMarker);
+      scene.add(this.snapMarker);
     }
     this.snapMarker.position.copy(point);
-    this.snapMarker.material.color.setHex(snapInfo.type === 'midpoint' ? 0x00ffff : 0xffaa00);
-    this.snapMarker.visible = snapInfo.type !== 'none';
+    this.snapMarker.material.color.setHex(snapType === 'midpoint' ? 0x00ffff : 0xffaa00);
+    this.snapMarker.visible = snapType !== 'none' || is2D; // Always show cursor in 2D
 
     // Draw dashed preview if we have a first point
     if (this.firstPoint) {
@@ -158,14 +203,14 @@ export class MeasurementTool {
       const geom = new THREE.BufferGeometry().setFromPoints([this.firstPoint, point]);
       const mat = new THREE.LineDashedMaterial({
         color: 0x00ff88,
-        dashSize: 0.15,
-        gapSize: 0.08
+        dashSize: is2D ? 10 : 0.15,
+        gapSize: is2D ? 5 : 0.08
       });
       const line = new THREE.Line(geom, mat);
       line.computeLineDistances();
       line.userData._temp = 'line';
       line.renderOrder = 999;
-      this.viewer.scene.add(line);
+      scene.add(line);
       this.tempObjects.push(line);
     }
   }
@@ -224,8 +269,6 @@ export class MeasurementTool {
     mesh.renderOrder = 1000;
     this.viewer.scene.add(mesh);
     return mesh;
-  }
-
   /** Create extension tick at a point */
   _createTick(point, direction, length) {
     const p1 = point.clone().add(direction.clone().multiplyScalar(length));
@@ -238,46 +281,66 @@ export class MeasurementTool {
     return tick;
   }
 
-  /** Create a sprite label showing the distance */
-  _createLabel(distance, start, end) {
-    const midpoint = new THREE.Vector3().lerpVectors(start, end, 0.5);
+  _createMeasurement(p1, p2, scene = this.viewer.scene) {
+    const distance = p1.distanceTo(p2);
+    if (distance < 0.001) return;
 
+    const group = new THREE.Group();
+
+    // Solid line
+    const geom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+    const mat = new THREE.LineBasicMaterial({ color: 0x00ff88, linewidth: 2, depthTest: false });
+    const line = new THREE.Line(geom, mat);
+    line.renderOrder = 999;
+    group.add(line);
+
+    // End points
+    const sphereGeom = new THREE.SphereGeometry(0.05, 16, 12);
+    const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, depthTest: false });
+    const s1 = new THREE.Mesh(sphereGeom, sphereMat);
+    s1.position.copy(p1);
+    s1.renderOrder = 1000;
+    group.add(s1);
+
+    const s2 = new THREE.Mesh(sphereGeom, sphereMat);
+    s2.position.copy(p2);
+    s2.renderOrder = 1000;
+    group.add(s2);
+
+    // Dynamic text label
+    const midPoint = new THREE.Vector3().lerpVectors(p1, p2, 0.5);
+    const label = this._createLabelSprite(distance);
+    label.position.copy(midPoint);
+    label.renderOrder = 1001;
+    group.add(label);
+
+    scene.add(group);
+
+    const measurement = { id: Date.now().toString(), p1, p2, distance, group };
+    this.measurements.push(measurement);
+    
+    if (this.onMeasurementAdded) this.onMeasurementAdded(measurement);
+  }
+
+  _createLabelSprite(distance) {
     const canvas = document.createElement('canvas');
-    const dpr = Math.min(window.devicePixelRatio, 2);
-    canvas.width = 320 * dpr;
-    canvas.height = 72 * dpr;
+    canvas.width = 256;
+    canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
 
-    // Background
-    ctx.fillStyle = 'rgba(0, 16, 32, 0.9)';
-    ctx.beginPath();
-    ctx.roundRect(0, 0, 320, 72, 10);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.roundRect(0, 0, 256, 64, 8);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = '#00d4ff';
+    ctx.strokeStyle = '#00ff88';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(2, 2, 316, 68, 9);
     ctx.stroke();
 
-    // Format distance
-    let text;
-    if (distance >= 1) {
-      text = `${distance.toFixed(3)} m`;
-    } else if (distance >= 0.01) {
-      text = `${(distance * 100).toFixed(1)} cm`;
-    } else {
-      text = `${(distance * 1000).toFixed(1)} mm`;
-    }
-
-    // Text
+    ctx.font = 'bold 28px "Segoe UI", Inter, sans-serif';
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 30px Inter, Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 160, 36);
+    ctx.fillText(`${distance.toFixed(2)} m`, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
@@ -287,32 +350,30 @@ export class MeasurementTool {
       sizeAttenuation: true
     });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.position.copy(midpoint);
     sprite.position.y += 0.25;
     sprite.scale.set(2.4, 0.54, 1);
     sprite.renderOrder = 1001;
-    this.viewer.scene.add(sprite);
 
     return sprite;
   }
 
   /** Add temporary marker for first point */
-  _addTempMarker(point) {
-    const geom = new THREE.SphereGeometry(0.08, 16, 12);
+  _addTempMarker(point, scene = this.viewer.scene) {
+    const geom = new THREE.SphereGeometry(0.06, 16, 12);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, depthTest: false });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.copy(point);
-    mesh.renderOrder = 1000;
-    mesh.userData._temp = 'marker';
-    this.viewer.scene.add(mesh);
-    this.tempObjects.push(mesh);
+    const marker = new THREE.Mesh(geom, mat);
+    marker.position.copy(point);
+    marker.userData._temp = 'marker';
+    marker.renderOrder = 1000;
+    scene.add(marker);
+    this.tempObjects.push(marker);
   }
 
   /** Remove temp preview line only */
   _removeTempLine() {
     this.tempObjects = this.tempObjects.filter(obj => {
       if (obj.userData._temp === 'line') {
-        this.viewer.scene.remove(obj);
+        if (obj.parent) obj.parent.remove(obj);
         obj.geometry?.dispose();
         obj.material?.dispose();
         return false;
@@ -324,7 +385,7 @@ export class MeasurementTool {
   /** Clear all temporary objects */
   _clearTemp() {
     for (const obj of this.tempObjects) {
-      this.viewer.scene.remove(obj);
+      if (obj.parent) obj.parent.remove(obj);
       obj.geometry?.dispose();
       obj.material?.dispose();
     }
@@ -333,10 +394,13 @@ export class MeasurementTool {
 
   /** Dispose a single measurement */
   _disposeMeasurement(m) {
+    if (m.group && m.group.parent) {
+      m.group.parent.remove(m.group);
+    }
     const objects = [m.line, m.marker1, m.marker2, m.tick1, m.tick2, m.label];
     for (const obj of objects) {
       if (!obj) continue;
-      this.viewer.scene.remove(obj);
+      if (obj.parent) obj.parent.remove(obj);
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
         if (obj.material.map) obj.material.map.dispose();
