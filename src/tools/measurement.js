@@ -269,6 +269,8 @@ export class MeasurementTool {
     mesh.renderOrder = 1000;
     this.viewer.scene.add(mesh);
     return mesh;
+  }
+
   /** Create extension tick at a point */
   _createTick(point, direction, length) {
     const p1 = point.clone().add(direction.clone().multiplyScalar(length));
